@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Resume Analyzer Pro</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: auto;
+        }
+        .card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            margin-top: 0;
+            color: #1e3c72;
+        }
+        .flex-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+        }
+        .col {
+            flex: 1;
+            min-width: 300px;
+        }
+        label {
+            font-weight: 600;
+            display: block;
+            margin: 15px 0 5px;
+        }
+        textarea, input[type="file"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 12px;
+            font-size: 14px;
+        }
+        textarea {
+            min-height: 150px;
+            font-family: monospace;
+        }
+        button {
+            background: #1e3c72;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 40px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 15px;
+            transition: 0.2s;
+        }
+        button:hover {
+            background: #0f2b4f;
+        }
+        .progress-bar {
+            background: #e0e0e0;
+            border-radius: 20px;
+            height: 24px;
+            width: 100%;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            background: #2c7da0;
+            height: 100%;
+            width: 0%;
+            color: white;
+            line-height: 24px;
+            padding-left: 10px;
+            border-radius: 20px;
+            transition: width 0.3s;
+        }
+        .verdict {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 40px;
+            font-weight: bold;
+        }
+        .verdict-reject { background: #d9534f; color: white; }
+        .verdict-consider { background: #f0ad4e; color: black; }
+        .verdict-strong { background: #5cb85c; color: white; }
+        .result-card {
+            background: #f9f9fb;
+            border-radius: 16px;
+            padding: 15px;
+            margin-top: 15px;
+            border-left: 4px solid #1e3c72;
+        }
+        .history-item {
+            background: #f1f1f1;
+            padding: 10px;
+            margin: 8px 0;
+            border-radius: 12px;
+            cursor: pointer;
+        }
+        .history-item:hover {
+            background: #e2e6ea;
+        }
+        .batch-progress {
+            font-size: 14px;
+            color: #2c7da0;
+        }
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+            margin: 5px;
+        }
+        .error {
+            color: #d9534f;
+        }
+        hr {
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="card">
+        <h2>🤖 AI Resume Analyzer Pro</h2>
+        <p>Upload PDF, DOCX, or TXT – get ATS score, skills analysis, and hiring verdict. Batch processing & history included.</p>
+    </div>
+
+    <div class="flex-row">
+        <!-- Left: Input area -->
+        <div class="col">
+            <div class="card">
+                <h3>📄 Single Resume (paste or upload)</h3>
+                <label>Resume Text</label>
+                <textarea id="resumeText" placeholder="Paste resume text here..."></textarea>
+                <label>Or upload file</label>
+                <input type="file" id="singleFile" accept=".txt,.pdf,.docx">
+                <label>Job Description (optional)</label>
+                <textarea id="jobDescSingle" placeholder="Paste job requirements..."></textarea>
+                <button id="analyzeSingleBtn">🔍 Analyze Single Resume</button>
+            </div>
+
+            <div class="card">
+                <h3>📚 Batch Upload (multiple resumes)</h3>
+                <label>Upload multiple files</label>
+                <input type="file" id="batchFiles" multiple accept=".txt,.pdf,.docx">
+                <label>Job Description (applies to all)</label>
+                <textarea id="jobDescBatch" placeholder="Optional job description"></textarea>
+                <button id="analyzeBatchBtn">⚡ Analyze Batch</button>
+                <div id="batchStatus" class="batch-progress"></div>
+            </div>
+        </div>
+
+        <!-- Right: Results & History -->
+        <div class="col">
+            <div class="card">
+                <h3>📊 Current Analysis Result</h3>
+                <div id="currentResult">Click "Analyze" to see results here.</div>
+                <div id="downloadButtons" style="display:none; margin-top:15px;">
+                    <button id="downloadJsonBtn" class="btn-small">📥 Download JSON</button>
+                    <button id="downloadPdfBtn" class="btn-small">📑 Download PDF</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>📜 Analysis History 
+                    <button id="clearHistoryBtn" class="btn-small" style="float:right;">Clear History</button>
+                    <button id="downloadAllZipBtn" class="btn-small" style="float:right; margin-right:5px;">📦 Download All (ZIP)</button>
+                </h3>
+                <div id="historyList">No history yet.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentAnalysis = null;
+    let currentFilename = "resume_analysis";
+
+    // Helper to render analysis result with progress bar
+    function renderResult(analysis, filenameHint) {
+        if (analysis.error) {
+            document.getElementById('currentResult').innerHTML = `<div class="error">❌ Error: ${analysis.error}</div>`;
+            document.getElementById('downloadButtons').style.display = 'none';
+            return;
+        }
+        const score = analysis.overall_score || 0;
+        const verdict = analysis.final_verdict || "N/A";
+        let verdictClass = "";
+        if (verdict.toLowerCase().includes("strong")) verdictClass = "verdict-strong";
+        else if (verdict.toLowerCase().includes("consider")) verdictClass = "verdict-consider";
+        else if (verdict.toLowerCase().includes("reject")) verdictClass = "verdict-reject";
+        
+        let html = `
+            <div class="result-card">
+                <strong>Overall Score:</strong>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: ${score}%; background: ${score>=70?'#5cb85c': score>=40?'#f0ad4e':'#d9534f'}">${score}/100</div>
+                </div>
+                <strong>Final Verdict:</strong> <span class="verdict ${verdictClass}">${verdict}</span>
+                <hr>
+                <strong>Strengths:</strong><br>${analysis.strengths?.map(s => `✓ ${s}`).join('<br>') || 'None'}
+                <hr>
+                <strong>Weaknesses:</strong><br>${analysis.weaknesses?.map(w => `✗ ${w}`).join('<br>') || 'None'}
+                <hr>
+                <strong>Skills Detected:</strong> ${analysis.skills_detected?.join(', ') || 'None'}<br>
+                <strong>Missing Skills:</strong> ${analysis.missing_skills?.join(', ') || 'None (no job role or none missing)'}
+                <hr>
+                <strong>Experience:</strong> ${analysis.experience_analysis}<br>
+                <strong>Projects:</strong> ${analysis.project_feedback}<br>
+                <strong>ATS Score:</strong> ${analysis.ats_score}/100 &nbsp; <strong>Issues:</strong> ${analysis.ats_issues?.join('; ') || 'None'}
+                <hr>
+                <strong>Resume Tips:</strong><ul>${analysis.resume_tips?.map(t => `<li>${t}</li>`).join('') || ''}</ul>
+            </div>
+        `;
+        document.getElementById('currentResult').innerHTML = html;
+        document.getElementById('downloadButtons').style.display = 'block';
+        currentAnalysis = analysis;
+        currentFilename = filenameHint || "resume_analysis";
+    }
+
+    // Single analyze (text or file)
+    document.getElementById('analyzeSingleBtn').onclick = async () => {
+        let resumeText = document.getElementById('resumeText').value.trim();
+        const fileInput = document.getElementById('singleFile');
+        const jobDesc = document.getElementById('jobDescSingle').value.trim();
+
+        if (fileInput.files.length > 0) {
+            // For simplicity, we'll send file via FormData. But our /analyze expects JSON text.
+            // Better to read file and fill textarea automatically.
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                document.getElementById('resumeText').value = e.target.result;
+                await performSingleAnalyze(e.target.result, jobDesc, file.name);
+            };
+            reader.readAsText(file);
+        } else if (resumeText) {
+            await performSingleAnalyze(resumeText, jobDesc, "pasted_text");
+        } else {
+            alert("Please paste resume text or upload a file.");
+        }
+    };
+
+    async function performSingleAnalyze(text, jobDesc, filenameHint) {
+        const response = await fetch('/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ resume_text: text, job_description: jobDesc })
+        });
+        const data = await response.json();
+        renderResult(data, filenameHint.replace(/\.[^/.]+$/, "")); // remove extension
+        loadHistory(); // refresh history
+    }
+
+    // Batch analyze
+    document.getElementById('analyzeBatchBtn').onclick = async () => {
+        const files = document.getElementById('batchFiles').files;
+        if (files.length === 0) {
+            alert("Select at least one file.");
+            return;
+        }
+        const jobDesc = document.getElementById('jobDescBatch').value.trim();
+        const formData = new FormData();
+        for (let i = 0; i < files.length; i++) {
+            formData.append('files', files[i]);
+        }
+        formData.append('job_description', jobDesc);
+        document.getElementById('batchStatus').innerText = `Analyzing ${files.length} files... This may take a minute.`;
+        const response = await fetch('/analyze_batch', { method: 'POST', body: formData });
+        const result = await response.json();
+        document.getElementById('batchStatus').innerHTML = `✅ Batch complete. ${result.batch_results?.length || 0} files processed. Check history for details.`;
+        loadHistory();
+        // Show first result in current view
+        if (result.batch_results && result.batch_results.length > 0 && !result.batch_results[0].error) {
+            renderResult(result.batch_results[0], result.batch_results[0].filename);
+        }
+    };
+
+    // Load history from server
+    async function loadHistory() {
+        const res = await fetch('/get_history');
+        const data = await res.json();
+        const historyDiv = document.getElementById('historyList');
+        if (!data.history || data.history.length === 0) {
+            historyDiv.innerHTML = "No history yet.";
+            return;
+        }
+        let html = "";
+        data.history.forEach((item, idx) => {
+            let verdictClass = "";
+            if (item.verdict.toLowerCase().includes("strong")) verdictClass = "verdict-strong";
+            else if (item.verdict.toLowerCase().includes("consider")) verdictClass = "verdict-consider";
+            else if (item.verdict.toLowerCase().includes("reject")) verdictClass = "verdict-reject";
+            html += `
+                <div class="history-item" data-idx="${idx}">
+                    <strong>${item.filename}</strong><br>
+                    Score: ${item.score}/100 &nbsp; Verdict: <span class="verdict ${verdictClass}" style="font-size:12px;">${item.verdict}</span><br>
+                    <small>${new Date(item.timestamp).toLocaleString()}</small>
+                </div>
+            `;
+        });
+        historyDiv.innerHTML = html;
+        // Attach click to load full analysis (we'll need to fetch full from history endpoint)
+        // Since we only stored summary, we need to fetch full analysis from server.
+        // We'll add a route to get full analysis by index? Simpler: when clicking, we ask backend for full analysis.
+        // For brevity, implement quick fetch: we can add a new endpoint /get_full_history. Let's do that.
+        const fullHistoryRes = await fetch('/get_history_full');
+        const fullData = await fullHistoryRes.json();
+        const fullHistory = fullData.full_history || [];
+        document.querySelectorAll('.history-item').forEach((div, i) => {
+            div.onclick = () => {
+                if (fullHistory[i] && fullHistory[i].analysis) {
+                    renderResult(fullHistory[i].analysis, fullHistory[i].filename);
+                } else {
+                    alert("Full analysis not available.");
+                }
+            };
+        });
+    }
+
+    // Also need to modify backend to add /get_history_full
+    // We'll add that route now (in backend code). But to keep everything together, I'll mention it.
+    // Clear history
+    document.getElementById('clearHistoryBtn').onclick = async () => {
+        await fetch('/clear_history', { method: 'POST' });
+        loadHistory();
+        document.getElementById('currentResult').innerHTML = "History cleared.";
+        document.getElementById('downloadButtons').style.display = 'none';
+    };
+    // Download JSON
+    document.getElementById('downloadJsonBtn').onclick = async () => {
+        if (!currentAnalysis) return;
+        const res = await fetch('/download_report_json', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ analysis: currentAnalysis, filename: currentFilename })
+        });
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${currentFilename}_analysis.json`;
+        a.click();
+    };
+    // Download PDF
+    document.getElementById('downloadPdfBtn').onclick = async () => {
+        if (!currentAnalysis) return;
+        const res = await fetch('/download_report_pdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ analysis: currentAnalysis, filename: currentFilename })
+        });
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${currentFilename}_report.pdf`;
+        a.click();
+    };
+    // Download all as ZIP
+    document.getElementById('downloadAllZipBtn').onclick = async () => {
+        const res = await fetch('/get_history_full');
+        const data = await res.json();
+        if (!data.full_history || data.full_history.length === 0) {
+            alert("No history to export.");
+            return;
+        }
+        const zipRes = await fetch('/download_all_reports_zip', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ history: data.full_history })
+        });
+        const blob = await zipRes.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = "all_reports.zip";
+        a.click();
+    };
+
+    loadHistory();
+</script>
+</body>
+</html>
